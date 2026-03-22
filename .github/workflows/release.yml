@@ -33,6 +33,7 @@ jobs:
           files: |
             Hosky_BE.zip
             Hosky_JE.zip
+          generate_release_notes: true
           draft: false          # or true if you want to review first
           prerelease: true      # optional: mark as pre-release
         env:
