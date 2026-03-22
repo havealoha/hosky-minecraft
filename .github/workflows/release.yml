@@ -43,7 +43,7 @@ jobs:
           # Install jq if needed for JSON parsing
           sudo apt-get install -y jq
 
-          FILE="Hosky_BE.zip"   # ← change to whatever your script actually names it
+          FILE="/home/runner/work/hosky-minecraft/hosky-minecraft/Hosky_BE.zip"   # ← change to whatever your script actually names it
           ls -l
           curl -X POST https://api.pinata.cloud/pinning/pinFileToIPFS \
             -H "pinata_api_key: $PINATA_API_KEY" \
@@ -51,6 +51,7 @@ jobs:
             -F file=@"$FILE" \
             -F "pinataMetadata={\"name\": \"Hosky BE Pack v${GITHUB_REF#refs/tags/}\"}" \
             | jq -r '.IpfsHash' > ipfs_hash.txt
+            cat ipfs_hash.txt
             ls -l
 
           echo "Bedrock pack pinned to IPFS: https://ipfs.io/ipfs/$(cat ipfs_hash.txt)"
