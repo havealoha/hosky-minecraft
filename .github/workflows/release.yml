@@ -86,7 +86,7 @@ jobs:
           echo "IPFS hash: $HASH"
           echo "Update Minecraft Geyser Bedrock Resource Pack URL to: https://ipfs.io/ipfs/$HASH/?filename=Hosky_BE.zip"
           else
-          echo "❌ Pinning failed - no IpfsHash in response"
+          echo "Pinning failed - no IpfsHash in response"
           cat pinata_response.txt
           fi
        
