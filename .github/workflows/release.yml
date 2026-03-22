@@ -80,7 +80,16 @@ jobs:
             -F file=@"$FILE" \
             -F 'pinataMetadata={"name": "Hosky_BE_${{ github.run_number }}.zip"}' \
             | tee pinata_response.txt
-
+          HASH=$(jq -r '.IpfsHash' pinata_response.txt 2>/dev/null || echo "")
+          if [ -n "$HASH" ]; then
+          echo "Pinned successfully!"
+          echo "IPFS hash: $HASH"
+          echo "Update Minecraft Geyser Bedrock Resource Pack URL to: https://ipfs.io/ipfs/$HASH/?filename=Hosky_BE.zip"
+          else
+          echo "❌ Pinning failed - no IpfsHash in response"
+          cat pinata_response.txt
+          fi
+       
           echo "=== Full Pinata response ==="
           cat pinata_response.txt
 
