@@ -4,37 +4,38 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install zip & dependencies (if needed)
-        run: sudo apt-get update && sudo apt-get install -y zip
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y zip jq
 
-      - name: Make Bedrock pack
+      - name: Build Bedrock
         run: bash make-hosky-be.sh
 
-      - name: Make Java pack
+      - name: Build Java
         run: bash make-hosky-je.sh
 
-      - name: Create GitHub Release
+      # Release only on tag push
+      - name: Create Release & Upload Assets
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             Hosky_BE.zip
             Hosky_JE.zip
           generate_release_notes: true
-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Pinata always (or make conditional)
       - name: Upload Bedrock to Pinata
-        if: always()
         env:
           PINATA_API_KEY: ${{ secrets.PINATA_API_KEY }}
           PINATA_SECRET_API_KEY: ${{ secrets.PINATA_SECRET_API_KEY }}
