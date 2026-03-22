@@ -1,5 +1,4 @@
-rm Hosky.zip
+rm Hosky_BE.zip
 cd je
-zip -r ../Hosky.zip .  -x "*.DS_Store"
-cp ../Hosky.zip ~/Library/Application\ Support/minecraft/resourcepacks
+zip -r ../Hosky_JE.zip .
 
