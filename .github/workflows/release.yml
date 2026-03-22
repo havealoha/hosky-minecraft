@@ -39,25 +39,54 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Pinata always (or make conditional)
-      - name: Upload Bedrock to Pinata
+      - name: Debug before Pinata upload
+        run: |
+          pwd
+          ls -la
+          echo "Looking for:"
+          ls -la Hosky_*.zip 2>/dev/null || echo "!!! No Hosky_*.zip files found !!!"
+          if [ -f "Hosky_BE.zip" ]; then
+            echo "Hosky_BE.zip exists → size: $(stat -c %s Hosky_BE.zip) bytes"
+            file Hosky_BE.zip
+          else
+            echo "Hosky_BE.zip is MISSING"
+          fi
+
+      - name: Upload Bedrock (Hosky_BE.zip) to Pinata
+        if: always()   # run even if debug fails, so we see output
         env:
           PINATA_API_KEY: ${{ secrets.PINATA_API_KEY }}
           PINATA_SECRET_API_KEY: ${{ secrets.PINATA_SECRET_API_KEY }}
         run: |
-          # Install jq if needed for JSON parsing
-          sudo apt-get install -y jq
+          set -x   # show commands as they run (vars masked)
 
-          FILE="/home/runner/work/hosky-minecraft/hosky-minecraft/Hosky_BE.zip"   # ← change to whatever your script actually names it
-          ls -l
-          curl -X POST https://api.pinata.cloud/pinning/pinFileToIPFS \
+          FILE="Hosky_BE.zip"
+
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: $FILE does not exist in $(pwd)"
+            ls -la
+            exit 1
+          fi
+
+          echo "Uploading $FILE → size $(stat -c %s "$FILE") bytes"
+
+          # Quick key check (length only, value stays secret)
+          echo "API key length: ${#PINATA_API_KEY}"
+          echo "Secret key length: ${#PINATA_SECRET_API_KEY}"
+
+          curl -v -X POST https://api.pinata.cloud/pinning/pinFileToIPFS \
             -H "pinata_api_key: $PINATA_API_KEY" \
             -H "pinata_secret_api_key: $PINATA_SECRET_API_KEY" \
             -F file=@"$FILE" \
-            -F "pinataMetadata={\"name\": \"Hosky BE Pack v${GITHUB_REF#refs/tags/}\"}" \
-            | jq -r '.IpfsHash' > ipfs_hash.txt
-            cat ipfs_hash.txt
-            ls -l
+            -F 'pinataMetadata={"name": "Hosky_BE_${{ github.run_number }}.zip"}' \
+            | tee pinata_response.txt
 
-          echo "Bedrock pack pinned to IPFS: https://ipfs.io/ipfs/$(cat ipfs_hash.txt)"
-          # Optional: also pinata-gateway or gateway.pinata.cloud link
+          echo "=== Full Pinata response ==="
+          cat pinata_response.txt
+
+          # Try to show hash if successful
+          if grep -q "IpfsHash" pinata_response.txt; then
+            echo "Success! IPFS hash found."
+          else
+            echo "No IpfsHash → likely failed. Check above for error."
+          fi
