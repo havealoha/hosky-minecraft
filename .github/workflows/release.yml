@@ -1,5 +1,7 @@
 name: Build & Release Hosky Minecraft Resource Packs
-
+permissions:
+  contents: write 
+  
 on:
   push:
     tags:
