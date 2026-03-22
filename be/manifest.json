@@ -1,0 +1,18 @@
+{
+    "format_version": 2,
+    "header": {
+        "description": "Hosky",
+        "name": "Hosky",
+        "uuid": "01aa8fc3-2cba-43ec-98bd-66c2b3f0ae25",
+        "version": [0, 0, 2],
+        "min_engine_version": [ 1, 21, 111 ]
+    },
+    "modules": [
+        {
+            "description": "Hosky",
+            "type": "resources",
+            "uuid": "329fb472-2bd5-49c2-90cd-ef8040e43c36",
+            "version": [0, 0, 1]
+        }
+    ]
+}

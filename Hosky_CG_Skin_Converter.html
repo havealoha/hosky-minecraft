@@ -1,0 +1,174 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hosky CG Skin Converter</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; display: flex; justify-content: center; padding: 20px; }
+        .card { background: #1e1e1e; padding: 25px; border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); max-width: 550px; text-align: center; }
+        h1 { color: #ff9800; margin-bottom: 5px; }
+        .preview-box { background: #333; padding: 15px; border-radius: 10px; margin: 20px 0; }
+        canvas { image-rendering: pixelated; width: 256px; height: 256px; border: 2px solid #444; background: #252525; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; text-align: left; }
+        .full-width { grid-column: span 2; }
+        input[type="text"], input[type="file"] { padding: 10px; border-radius: 5px; border: 1px solid #444; background: #000; color: #fff; width: calc(100% - 24px); }
+        .color-group { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 0.9em; }
+        .presets { margin: 10px 0; display: flex; justify-content: center; gap: 10px; }
+        button { padding: 12px 15px; cursor: pointer; border-radius: 5px; border: none; font-weight: bold; transition: 0.2s; }
+        .btn-gen { background: #ff9800; color: white; width: 100%; font-size: 1.1em; margin-top: 10px; }
+        .btn-gen:hover { background: #e68900; }
+        .btn-preset { background: #444; color: #fff; font-size: 0.8em; padding: 8px 12px; }
+        #downloadLink { display: none; margin-top: 15px; color: #ff9800; text-decoration: none; border: 2px solid #ff9800; padding: 10px; border-radius: 5px; font-weight: bold; }
+        label { font-size: 0.8em; color: #888; margin-bottom: 4px; display: block; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>Hosky CG Skin Converter</h1>
+    <p>Choose option 1 (more reliable) or 2</p>
+    
+    <div class="controls">
+        <div class="full-width">
+            <label>Option 1: Upload CG Image Locally</label>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+        
+        <div class="full-width">
+            <label>Option 2: Paste IPFS CID or Web URL To CG Image</label>
+            <input type="text" id="pathInput" placeholder="e.g. Qm... or https://...">
+        </div>
+
+        <div class="color-group">
+            <label>Primary Fur</label>
+            <input type="color" id="primaryColor" value="#2d2d2d">
+        </div>
+        <div class="color-group">
+            <label>Secondary (Paws)</label>
+            <input type="color" id="secondaryColor" value="#ffffff">
+        </div>
+        
+        <div class="full-width" style="text-align:center">
+            <label>Fur Texture Density</label>
+            <input type="range" id="noiseRange" min="0" max="40" value="18" style="width:80%">
+        </div>
+    </div>
+
+    <div class="presets">
+        <button class="btn-preset" onclick="setColors('#2d2d2d', '#ffffff')">Original (B&W)</button>
+        <button class="btn-preset" onclick="setColors('#c68e3d', '#f3e5ab')">Golden Lab</button>
+    </div>
+
+    <button class="btn-gen" onclick="processImage()">Generate Textured Skin</button>
+
+    <div class="preview-box">
+        <canvas id="skinCanvas" width="64" height="64"></canvas>
+    </div>
+
+    <a id="downloadLink" download="hosky_cg_skin.png">Download Skin PNG</a>
+</div>
+
+<script>
+    function setColors(p, s) {
+        document.getElementById('primaryColor').value = p;
+        document.getElementById('secondaryColor').value = s;
+    }
+
+    function hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
+    }
+
+    function drawTexturedRect(ctx, x, y, w, h, baseHex, noiseAmount, darken = 0) {
+        const base = hexToRgb(baseHex);
+        for (let i = 0; i < w; i++) {
+            for (let j = 0; j < h; j++) {
+                const noise = (Math.random() - 0.5) * noiseAmount;
+                const r = Math.max(0, Math.min(255, base.r + noise - darken));
+                const g = Math.max(0, Math.min(255, base.g + noise - darken));
+                const b = Math.max(0, Math.min(255, base.b + noise - darken));
+                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                ctx.fillRect(x + i, y + j, 1, 1);
+            }
+        }
+    }
+
+    function processImage() {
+        const fileInput = document.getElementById('fileInput');
+        const pathInput = document.getElementById('pathInput').value.trim();
+        
+        if (fileInput.files && fileInput.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => createSkin(e.target.result);
+            reader.readAsDataURL(fileInput.files[0]);
+        } else if (pathInput) {
+            const url = pathInput.startsWith('http') ? pathInput : `https://ipfs.io/ipfs/${pathInput}`;
+            createSkin(url);
+        } else {
+            alert("Please upload a file or enter a CID/URL");
+        }
+    }
+
+    function createSkin(src) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = src;
+
+        img.onload = function() {
+            const canvas = document.getElementById('skinCanvas');
+            const ctx = canvas.getContext('2d');
+            const prim = document.getElementById('primaryColor').value;
+            const sec = document.getElementById('secondaryColor').value;
+            const noise = parseInt(document.getElementById('noiseRange').value);
+
+            ctx.clearRect(0, 0, 64, 64);
+            ctx.imageSmoothingEnabled = false;
+
+            // 1. BASE BODY TEXTURES
+            drawTexturedRect(ctx, 0, 0, 32, 16, prim, noise); // Head base
+            drawTexturedRect(ctx, 16, 16, 24, 16, prim, noise); // Torso
+            drawTexturedRect(ctx, 20, 20, 8, 12, sec, noise/2); // Belly
+            
+            drawTexturedRect(ctx, 40, 16, 16, 16, prim, noise, 15); // R-Arm
+            drawTexturedRect(ctx, 32, 48, 16, 16, prim, noise, 15); // L-Arm
+            drawTexturedRect(ctx, 0, 16, 16, 16, prim, noise, 25);  // R-Leg
+            drawTexturedRect(ctx, 16, 48, 16, 16, prim, noise, 25); // L-Leg
+
+            // Paws
+            drawTexturedRect(ctx, 44, 28, 4, 4, sec, noise/3); // R-Hand
+            drawTexturedRect(ctx, 36, 60, 4, 4, sec, noise/3); // L-Hand
+            drawTexturedRect(ctx, 4, 28, 4, 4, sec, noise/3);  // R-Foot
+            drawTexturedRect(ctx, 20, 60, 4, 4, sec, noise/3); // L-Foot
+
+            // 2. FACE MAPPING (1400:3168 Ratio)
+            const ratio = 1400 / 3168;
+            const cropSize = Math.min(img.width, img.height) * ratio;
+            const cx = (img.width - cropSize) / 2;
+            const cy = (img.height - cropSize) / 2;
+
+            // Front Face (8,8)
+            ctx.drawImage(img, cx, cy, cropSize, cropSize, 8, 8, 8, 8);
+
+            // Back Face (24,8) - Mirrored
+            ctx.save();
+            ctx.translate(32, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(img, cx, cy, cropSize, cropSize, 0, 8, 8, 8);
+            ctx.restore();
+
+            // 3. HAT LAYER (Overlay for 3D depth)
+            // Minecraft head overlay is at (32,0) to (64,16)
+            // We draw the top half of the face there to make ears/fur pop
+            ctx.drawImage(img, cx, cy, cropSize, cropSize / 2, 40, 8, 8, 4);
+
+            // 4. FINALIZE
+            const link = document.getElementById('downloadLink');
+            link.href = canvas.toDataURL();
+            link.style.display = 'inline-block';
+        };
+        img.onerror = () => alert("Image failed to load.");
+    }
+</script>
+</body>
+</html>
