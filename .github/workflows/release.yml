@@ -106,7 +106,6 @@ jobs:
         env:
           FILEBASE_ACCESS_KEY: ${{ secrets.FILEBASE_ACCESS_KEY }}
           FILEBASE_SECRET_KEY: ${{ secrets.FILEBASE_SECRET_KEY }}
-          FILEBASE_RPC_TOKEN:   ${{ secrets.FILEBASE_RPC_TOKEN }}
           FILEBASE_BUCKET:     ${{ secrets.FILEBASE_BUCKET }}
           FILEBASE_IPNS_KEY:   ${{ secrets.FILEBASE_IPNS_KEY }}
         run: |
@@ -116,7 +115,22 @@ jobs:
           OBJECT_KEY="Hosky_BE.zip"
           REGION="us-east-1"
 
-          echo "Step 1: Uploading to S3..."
+          echo "Step 0: Generating and masking fresh RPC token..."
+          AUTH_RESPONSE=$(curl -s -X POST "https://api.filebase.io/v1/auth" \
+            -H "Content-Type: application/json" \
+            -d "{\"access_key\": \"${FILEBASE_ACCESS_KEY}\", \"secret_key\": \"${FILEBASE_SECRET_KEY}\"}")
+          
+          RPC_TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.token')
+
+          if [ "$RPC_TOKEN" == "null" ] || [ -z "$RPC_TOKEN" ]; then
+            echo "ERROR: Auth failed. Check your FILEBASE_ACCESS_KEY and SECRET_KEY."
+            exit 1
+          fi
+          
+          # This tells GitHub to redact the token value from ALL logs in this run
+          echo "::add-mask::$RPC_TOKEN"
+
+          echo "Step 1: Uploading $FILE to S3..."
           curl --progress-bar --fail-with-body \
             --aws-sigv4 "aws:amz:$REGION:s3" \
             --user "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" \
@@ -124,27 +138,17 @@ jobs:
             "https://s3.filebase.com/${FILEBASE_BUCKET}/${OBJECT_KEY}" \
             -H "Content-Type: application/zip"
 
-          echo "Step 2: Retrieving CID..."
-          # Using -D - to dump headers to stdout for parsing
+          echo "Step 2: Extracting CID..."
           RESPONSE=$(curl -sI --fail-with-body \
             --aws-sigv4 "aws:amz:$REGION:s3" \
             --user "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" \
             "https://s3.filebase.com/${FILEBASE_BUCKET}/${OBJECT_KEY}")
 
-          # Improved parsing for 'QmeKQv...'
           CID=$(echo "$RESPONSE" | grep -i 'x-amz-meta-cid' | awk -F': ' '{print $2}' | tr -d '\r\n[:space:]')
-
-          if [ -z "$CID" ]; then
-            echo "ERROR: CID extraction failed"
-            exit 1
-          fi
           echo "CID: $CID"
 
-          echo "Step 3: Publishing to IPNS..."
-          # We now use the dedicated RPC Token in the Bearer header
-          PUBLISH_RESPONSE=$(curl -sS --fail-with-body -X POST \
-            -H "Authorization: Bearer ${FILEBASE_RPC_TOKEN}" \
-            "https://rpc.filebase.io/api/v0/name/publish?arg=/ipfs/${CID}&key=${FILEBASE_IPNS_KEY}")
-
-          echo "Success! IPNS record updated."
-          echo "$PUBLISH_RESPONSE" | jq .
+          echo "Step 3: Publishing to IPNS label: $FILEBASE_IPNS_KEY..."
+          # The IPNS publish uses the bucket-scoped token we generated
+          curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer ${RPC_TOKEN}" \
+            "https://rpc.filebase.io/api/v0/name/publish?arg=/ipfs/${CID}&key=${FILEBASE_IPNS_KEY}" | jq .
