@@ -115,17 +115,25 @@ jobs:
           OBJECT_KEY="Hosky_BE.zip"
           REGION="us-east-1"
 
-          echo "Step 0: Generating and masking fresh RPC token..."
-          AUTH_RESPONSE=$(curl -s -X POST "https://api.filebase.io/v1/auth" \
-            -H "Content-Type: application/json" \
-            -d "{\"access_key\": \"${FILEBASE_ACCESS_KEY}\", \"secret_key\": \"${FILEBASE_SECRET_KEY}\"}")
+echo "Step 0: Generating and masking fresh RPC token..."
+          # Filebase Platform API requires Basic Auth (AccessKey:SecretKey) encoded in Base64
+          # We use 'tr -d' to ensure no newlines sneak into the base64 string
+          AUTH_STRING=$(echo -n "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" | base64 | tr -d '\n')
           
-          RPC_TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.token')
+          # We use the token exchange endpoint
+          AUTH_RESPONSE=$(curl -s -X POST "https://api.filebase.io/v1/auth" \
+            -H "Authorization: Basic ${AUTH_STRING}")
+          
+          RPC_TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.token // empty')
 
-          if [ "$RPC_TOKEN" == "null" ] || [ -z "$RPC_TOKEN" ]; then
-            echo "ERROR: Auth failed. Check your FILEBASE_ACCESS_KEY and SECRET_KEY."
+          if [ -z "$RPC_TOKEN" ]; then
+            echo "ERROR: Auth failed. Response was:"
+            echo "$AUTH_RESPONSE"
             exit 1
           fi
+          
+          echo "::add-mask::$RPC_TOKEN"
+          echo "Token generated and masked successfully."
           
           # This tells GitHub to redact the token value from ALL logs in this run
           echo "::add-mask::$RPC_TOKEN"
