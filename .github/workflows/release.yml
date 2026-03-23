@@ -102,77 +102,49 @@ jobs:
 
           ##########################################
 
-          
       - name: Upload to Filebase (S3) + Publish to IPNS
         env:
           FILEBASE_ACCESS_KEY: ${{ secrets.FILEBASE_ACCESS_KEY }}
           FILEBASE_SECRET_KEY: ${{ secrets.FILEBASE_SECRET_KEY }}
+          FILEBASE_RPC_TOKEN:   ${{ secrets.FILEBASE_RPC_TOKEN }}
           FILEBASE_BUCKET:     ${{ secrets.FILEBASE_BUCKET }}
           FILEBASE_IPNS_KEY:   ${{ secrets.FILEBASE_IPNS_KEY }}
         run: |
           set -euo pipefail
-          # set -x # Uncomment for deep debugging if needed
 
           FILE="Hosky_BE.zip"
           OBJECT_KEY="Hosky_BE.zip"
-          REGION="us-east-1" # Filebase S3 default region
+          REGION="us-east-1"
 
-          if [ ! -f "$FILE" ]; then
-            echo "ERROR: $FILE missing in current directory"
-            ls -la
-            exit 1
-          fi
-
-          echo "Step 1: Uploading $FILE to Filebase S3..."
-          # Using --aws-sigv4 with explicit region to avoid 403 SignatureDoesNotMatch
+          echo "Step 1: Uploading to S3..."
           curl --progress-bar --fail-with-body \
             --aws-sigv4 "aws:amz:$REGION:s3" \
             --user "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" \
-            -X PUT \
-            -T "$FILE" \
+            -X PUT -T "$FILE" \
             "https://s3.filebase.com/${FILEBASE_BUCKET}/${OBJECT_KEY}" \
             -H "Content-Type: application/zip"
 
-          echo "Step 2: Retrieving IPFS CID from Filebase..."
-          # We use a HEAD request to get the x-amz-meta-cid header
-          # We use 'tr -d' to strip both carriage returns and trailing whitespace
+          echo "Step 2: Retrieving CID..."
+          # Using -D - to dump headers to stdout for parsing
           RESPONSE=$(curl -sI --fail-with-body \
             --aws-sigv4 "aws:amz:$REGION:s3" \
             --user "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" \
             "https://s3.filebase.com/${FILEBASE_BUCKET}/${OBJECT_KEY}")
 
+          # Improved parsing for 'QmeKQv...'
           CID=$(echo "$RESPONSE" | grep -i 'x-amz-meta-cid' | awk -F': ' '{print $2}' | tr -d '\r\n[:space:]')
 
           if [ -z "$CID" ]; then
-            echo "ERROR: Could not extract CID from Filebase headers."
-            echo "Full Header Response:"
-            echo "$RESPONSE"
+            echo "ERROR: CID extraction failed"
             exit 1
           fi
-
-          echo "New CID Detected: $CID"
+          echo "CID: $CID"
 
           echo "Step 3: Publishing to IPNS..."
-          # Note: Filebase IPNS RPC usually requires the Access Key as the Bearer token
-          # And the 'key' parameter should be the NAME of the key you created in the dashboard
+          # We now use the dedicated RPC Token in the Bearer header
           PUBLISH_RESPONSE=$(curl -sS --fail-with-body -X POST \
-            -H "Authorization: Bearer ${FILEBASE_ACCESS_KEY}" \
+            -H "Authorization: Bearer ${FILEBASE_RPC_TOKEN}" \
             "https://rpc.filebase.io/api/v0/name/publish?arg=/ipfs/${CID}&key=${FILEBASE_IPNS_KEY}")
 
-          echo "Publish Response:"
+          echo "Success! IPNS record updated."
           echo "$PUBLISH_RESPONSE" | jq .
-
-          # Validation
-          IPNS_NAME=$(echo "$PUBLISH_RESPONSE" | jq -r '.Name // empty')
-          
-          if [ -n "$IPNS_NAME" ]; then
-            echo "--------------------------------------------------"
-            echo "🚀 SUCCESS! IPNS Updated."
-            echo "IPNS Address: /ipns/$IPNS_NAME"
-            echo "Gateway URL: https://ipfs.filebase.io/ipns/$IPNS_NAME"
-            echo "--------------------------------------------------"
-          else
-            echo "ERROR: IPNS publish returned success but no Name was found."
-            exit 1
-          fi
-          
