@@ -78,7 +78,7 @@ jobs:
             -H "pinata_api_key: $PINATA_API_KEY" \
             -H "pinata_secret_api_key: $PINATA_SECRET_API_KEY" \
             -F file=@"$FILE" \
-            -F 'pinataMetadata={"name": "Hosky_BE_${{ github.run_number }}.zip"}' \
+            -F 'pinataMetadata={"name": "Hosky_BE.zip"}' \
             | tee pinata_response.txt
           HASH=$(jq -r '.IpfsHash' pinata_response.txt 2>/dev/null || echo "")
           if [ -n "$HASH" ]; then
@@ -99,3 +99,91 @@ jobs:
           else
             echo "No IpfsHash → likely failed. Check above for error."
           fi
+
+      - name: Upload Hosky_BE.zip to Filebase (S3) + Publish to IPNS
+        env:
+          FILEBASE_ACCESS_KEY: ${{ secrets.FILEBASE_ACCESS_KEY }}
+          FILEBASE_SECRET_KEY: ${{ secrets.FILEBASE_SECRET_KEY }}
+          FILEBASE_BUCKET:     ${{ secrets.FILEBASE_BUCKET }}
+          FILEBASE_IPNS_KEY:   ${{ secrets.FILEBASE_IPNS_KEY }}   # e.g. "hosky-bedrock" or "k51q..."
+        run: |
+          set -euo pipefail
+          set -x   # show commands (secrets masked)
+
+          FILE="Hosky_BE.zip"
+          OBJECT_KEY="Hosky_BE.zip"
+
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: $FILE missing"
+            ls -la
+            exit 1
+          fi
+
+          echo "Uploading $FILE → ${FILEBASE_BUCKET}/${OBJECT_KEY}"
+          echo "Key length: ${#FILEBASE_ACCESS_KEY} / ${#FILEBASE_SECRET_KEY}"
+
+          # ────────────────────────────────────────────────
+          # Upload via curl + AWS SigV4 (curl >=7.75 supports --aws-sigv4)
+          # This works well in ubuntu-latest runner
+          # ────────────────────────────────────────────────
+
+          curl --progress-bar --fail-with-body \
+            --aws-sigv4 "aws:amz::s3" \
+            --user "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" \
+            -X PUT \
+            -T "$FILE" \
+            "https://s3.filebase.com/${FILEBASE_BUCKET}/${OBJECT_KEY}" \
+            -H "Content-Type: application/zip" \
+            | cat   # just to see output
+
+          # Filebase returns the CID in x-amz-meta-cid or similar header on upload
+          # But easier/safer: list object metadata or use head-object to get it
+
+          echo "Fetching metadata to extract CID..."
+          RESPONSE=$(curl --fail-with-body -sS -I \
+            --aws-sigv4 "aws:amz::s3" \
+            --user "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" \
+            "https://s3.filebase.com/${FILEBASE_BUCKET}/${OBJECT_KEY}" \
+          )
+
+          CID=$(echo "$RESPONSE" | grep -i '^x-amz-meta-cid:' | awk '{print $2}' | tr -d '\r')
+
+          if [ -z "$CID" ]; then
+            echo "ERROR: Could not extract CID from headers"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "New CID: $CID"
+
+          # ────────────────────────────────────────────────
+          # Publish to IPNS using Filebase RPC API
+          # Requires Bearer token auth (your Filebase API key — same as access key in many cases)
+          # ────────────────────────────────────────────────
+
+          echo "Publishing /ipfs/$CID to IPNS key: $FILEBASE_IPNS_KEY"
+
+          PUBLISH_RESPONSE=$(curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer ${FILEBASE_ACCESS_KEY}" \
+            "https://rpc.filebase.io/api/v0/name/publish?arg=/ipfs/${CID}&key=${FILEBASE_IPNS_KEY}" \
+          )
+
+          echo "$PUBLISH_RESPONSE" | jq .
+
+          # Optional: parse Name & Value
+          IPNS_NAME=$(echo "$PUBLISH_RESPONSE" | jq -r '.Name // empty')
+          IPNS_VALUE=$(echo "$PUBLISH_RESPONSE" | jq -r '.Value // empty')
+
+          if [ -n "$IPNS_VALUE" ]; then
+            echo "Success! IPNS updated."
+            echo "IPNS name: /ipns/$IPNS_NAME"
+            echo "Points to: $IPNS_VALUE"
+            echo "Gateway URL example: https://ipfs.filebase.io/ipns/$IPNS_NAME"
+            echo "more likely only via https://frail-violet-porcupine.myfilebase.com/ipns/k51qzi5uqu5dm8tt21wl40l23sl6za2zi0gz9wixjs0efmabekdoey7eaib2p7"
+            echo "Or use public gateways: https://ipfs.io/ipns/$IPNS_NAME  (may be slower)"
+          else
+            echo "IPNS publish failed:"
+            echo "$PUBLISH_RESPONSE"
+            exit 1
+          fi
+          
