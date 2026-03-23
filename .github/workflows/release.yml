@@ -113,9 +113,9 @@ jobs:
           set -euo pipefail
 
           #####################################
-          echo "Try to generate Static RPC Token..."
-          RPC_TOKEN=$(echo -n "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" | base64 | tr -d '\n')
-          echo "::add-mask::$RPC_TOKEN"
+          #echo "Try to generate Static RPC Token..."
+          #RPC_TOKEN=$(echo -n "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" | base64 | tr -d '\n')
+          #echo "::add-mask::$RPC_TOKEN"
           #####################################
 
 
@@ -150,7 +150,7 @@ jobs:
           echo "Step 3: Publishing to IPNS..."
           # We now use the dedicated RPC Token in the Bearer header
           PUBLISH_RESPONSE=$(curl -sS --fail-with-body -X POST \
-            -H "Authorization: Bearer ${RPC_TOKEN}" \
+            -H "Authorization: Bearer ${FILEBASE_RPC_TOKEN}" \
             "https://rpc.filebase.io/api/v0/name/publish?arg=/ipfs/${CID}&key=${FILEBASE_IPNS_KEY}")
 
           echo "Success! IPNS record updated."
