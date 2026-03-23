@@ -128,13 +128,13 @@ jobs:
           # ────────────────────────────────────────────────
 
           curl --progress-bar --fail-with-body \
-            --aws-sigv4 "aws:amz::s3" \
-            --user "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" \
-            -X PUT \
-            -T "$FILE" \
-            "https://s3.filebase.com/${FILEBASE_BUCKET}/${OBJECT_KEY}" \
-            -H "Content-Type: application/zip" \
-            | cat   # just to see output
+           --aws-sigv4 "aws:amz::s3" \
+           --user "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" \
+           -X PUT -T "$FILE" \
+           "https://s3.filebase.com/${FILEBASE_BUCKET}/${OBJECT_KEY}" \
+           -H "Content-Type: application/zip" \
+           -H "x-amz-acl: private"
+  
 
           # Filebase returns the CID in x-amz-meta-cid or similar header on upload
           # But easier/safer: list object metadata or use head-object to get it
