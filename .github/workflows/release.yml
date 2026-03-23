@@ -115,7 +115,7 @@ jobs:
           OBJECT_KEY="Hosky_BE.zip"
           REGION="us-east-1"
 
-echo "Step 0: Generating and masking fresh RPC token..."
+          echo "Step 0: Generating and masking fresh RPC token..."
           # Filebase Platform API requires Basic Auth (AccessKey:SecretKey) encoded in Base64
           # We use 'tr -d' to ensure no newlines sneak into the base64 string
           AUTH_STRING=$(echo -n "${FILEBASE_ACCESS_KEY}:${FILEBASE_SECRET_KEY}" | base64 | tr -d '\n')
