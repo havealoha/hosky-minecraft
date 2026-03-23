@@ -159,12 +159,13 @@ jobs:
 
           # Add the file
           git add Hosky_JE.zip
+          git add Hosky_BE.zip
 
           # Check if there are actually changes to commit (so the Action doesn't fail if the file didn't change)
           if git diff --cached --quiet; then
-            echo "No changes detected in Hosky_JE.zip. Skipping commit."
+            echo "No changes detected in Hosky_*E.zip. Skipping commit."
           else
-            git commit -m "Automated update of Hosky_JE.zip [skip ci]"
+            git commit -m "Automated update of Hosky_*E.zip [skip ci]"
             git push origin HEAD:${{ github.ref }}
           fi
           
