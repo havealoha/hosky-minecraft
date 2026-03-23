@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install tools
-        run: sudo apt-get update && sudo apt-get install -y zip jq awscli  # added awscli here
+        run: sudo apt-get update && sudo apt-get install -y zip jq
 
       - name: Build Bedrock
         run: bash make-hosky-be.sh
@@ -39,7 +39,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Debug before uploads
+      - name: Debug before Pinata upload
         run: |
           pwd
           ls -la
@@ -52,9 +52,6 @@ jobs:
             echo "Hosky_BE.zip is MISSING"
           fi
 
-      # ────────────────────────────────────────────────
-      # Your original Pinata upload (unchanged)
-      # ────────────────────────────────────────────────
       - name: Upload Bedrock (Hosky_BE.zip) to Pinata
         if: always()   # run even if debug fails, so we see output
         env:
@@ -81,7 +78,7 @@ jobs:
             -H "pinata_api_key: $PINATA_API_KEY" \
             -H "pinata_secret_api_key: $PINATA_SECRET_API_KEY" \
             -F file=@"$FILE" \
-            -F 'pinataMetadata={"name": "Hosky_BE.zip"}' \
+            -F 'pinataMetadata={"name": "Hosky_BE_${{ github.run_number }}.zip"}' \
             | tee pinata_response.txt
           HASH=$(jq -r '.IpfsHash' pinata_response.txt 2>/dev/null || echo "")
           if [ -n "$HASH" ]; then
@@ -101,82 +98,4 @@ jobs:
             echo "Success! IPFS hash found."
           else
             echo "No IpfsHash → likely failed. Check above for error."
-          fi
-
-      # ────────────────────────────────────────────────
-      # NEW: Upload to Filebase S3 + get CID
-      # ────────────────────────────────────────────────
-      - name: Upload Bedrock to Filebase (S3-compatible)
-        if: always()
-        env:
-          FILEBASE_BUCKET: ${{ secrets.FILEBASE_BUCKET }}
-        run: |
-          set -euo pipefail
-
-          FILE="Hosky_BE.zip"
-          OBJECT_KEY="Hosky_BE_${{ github.run_number }}.zip"  # unique per run; change to Hosky_BE.zip to overwrite
-
-          if [ ! -f "$FILE" ]; then
-            echo "ERROR: $FILE missing - skipping Filebase upload"
-            exit 0  # don't fail whole job
-          fi
-
-          echo "Configuring AWS CLI for Filebase..."
-          aws configure set aws_access_key_id "${{ secrets.FILEBASE_ACCESS_KEY }}"
-          aws configure set aws_secret_access_key "${{ secrets.FILEBASE_SECRET_KEY }}"
-          aws configure set default.region us-east-1
-
-          echo "Uploading $FILE to s3://$FILEBASE_BUCKET/$OBJECT_KEY"
-
-          aws --endpoint-url https://s3.filebase.com \
-            s3 cp "$FILE" "s3://$FILEBASE_BUCKET/$OBJECT_KEY" \
-            --content-type application/zip || { echo "Upload failed - likely permissions issue"; exit 0; }
-
-          echo "Upload done. Fetching CID from object metadata..."
-
-          CID=$(aws --endpoint-url https://s3.filebase.com \
-            s3api head-object --bucket "$FILEBASE_BUCKET" --key "$OBJECT_KEY" \
-            --query 'Metadata.cid' --output text 2>/dev/null || echo "")
-
-          if [ -z "$CID" ]; then
-            echo "WARNING: CID not found in metadata. Check Filebase dashboard → bucket → $OBJECT_KEY → IPFS details for the CID."
-            echo "You can manually update IPNS if needed."
-          else
-            echo "Success! New CID: $CID"
-            echo "Public gateway example: https://ipfs.filebase.io/ipfs/$CID"
-          fi
-
-          # Export CID for next step (if found)
-          echo "FILEBASE_CID=$CID" >> $GITHUB_ENV
-
-      # ────────────────────────────────────────────────
-      # NEW: Publish CID to IPNS (only if CID found)
-      # ────────────────────────────────────────────────
-      - name: Update IPNS to point to new Filebase CID
-        if: always() && env.FILEBASE_CID != ''
-        env:
-          FILEBASE_RPC_BEARER: ${{ secrets.FILEBASE_RPC_BEARER }}
-          FILEBASE_IPNS_KEY:   ${{ secrets.FILEBASE_IPNS_KEY }}
-        run: |
-          set -euo pipefail
-
-          CID="${{ env.FILEBASE_CID }}"
-
-          echo "Publishing /ipfs/$CID to IPNS key: $FILEBASE_IPNS_KEY"
-
-          RESPONSE=$(curl -sS --fail-with-body -X POST \
-            -H "Authorization: Bearer $FILEBASE_RPC_BEARER" \
-            "https://rpc.filebase.io/api/v0/name/publish?arg=/ipfs/$CID&key=$FILEBASE_IPNS_KEY" \
-          )
-
-          echo "$RESPONSE" | jq . || echo "$RESPONSE"
-
-          if echo "$RESPONSE" | grep -q "Name"; then
-            IPNS_NAME=$(echo "$RESPONSE" | jq -r '.Name')
-            echo "IPNS updated successfully!"
-            echo "IPNS path: /ipns/$IPNS_NAME"
-            echo "Fast gateway: https://ipfs.filebase.io/ipns/$IPNS_NAME"
-            echo "Public fallback: https://ipfs.io/ipns/$IPNS_NAME (slower propagation)"
-          else
-            echo "IPNS publish failed - check bearer token, key name, or response above."
           fi
