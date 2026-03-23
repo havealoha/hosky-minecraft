@@ -148,3 +148,23 @@ jobs:
 
           echo "Success! IPNS record updated."
           echo "$PUBLISH_RESPONSE" | jq .
+          
+#################
+
+      - name: Commit and Push Hosky_JE.zip to Repo
+        run: |
+          # Set up the Git Config using the standard GitHub Actions bot profile
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Add the file
+          git add Hosky_JE.zip
+
+          # Check if there are actually changes to commit (so the Action doesn't fail if the file didn't change)
+          if git diff --cached --quiet; then
+            echo "No changes detected in Hosky_JE.zip. Skipping commit."
+          else
+            git commit -m "Automated update of Hosky_JE.zip [skip ci]"
+            git push origin HEAD:${{ github.ref }}
+          fi
+          
