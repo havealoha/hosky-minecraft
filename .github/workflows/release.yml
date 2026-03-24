@@ -24,20 +24,20 @@ jobs:
       - name: Build Java
         run: bash make-hosky-je.sh
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
-        with:
-          tag_name: v-manual-${{ github.run_number }}   # creates tags like v-manual-5, v-manual-6...
-          name: Hosky Packs (Manual Build ${{ github.run_number }})
-          files: |
-            Hosky_BE.zip
-            Hosky_JE.zip
-          generate_release_notes: true
-          draft: false          # or true if you want to review first
-          prerelease: true      # optional: mark as pre-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #- name: Create GitHub Release
+        #uses: softprops/action-gh-release@v2
+        #if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
+        #with:
+          #tag_name: v-manual-${{ github.run_number }}   # creates tags like v-manual-5, v-manual-6...
+          #name: Hosky Packs (Manual Build ${{ github.run_number }})
+          #files: |
+            #Hosky_BE.zip
+            #Hosky_JE.zip
+          #generate_release_notes: true
+          #draft: false          # or true if you want to review first
+          #prerelease: true      # optional: mark as pre-release
+        #env:
+          #GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Debug before Pinata upload
         run: |
@@ -78,7 +78,7 @@ jobs:
             -H "pinata_api_key: $PINATA_API_KEY" \
             -H "pinata_secret_api_key: $PINATA_SECRET_API_KEY" \
             -F file=@"$FILE" \
-            -F 'pinataMetadata={"name": "Hosky_BE_${{ github.run_number }}.zip"}' \
+            -F 'pinataMetadata={"name": "Hosky_BE.zip"}' \
             | tee pinata_response.txt
           HASH=$(jq -r '.IpfsHash' pinata_response.txt 2>/dev/null || echo "")
           if [ -n "$HASH" ]; then
